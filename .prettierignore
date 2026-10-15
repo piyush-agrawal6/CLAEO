@@ -1,0 +1,15 @@
+node_modules
+.next
+out
+build
+coverage
+test-results
+playwright-report
+blob-report
+package-lock.json
+drizzle
+public
+*.ico
+*.tsbuildinfo
+next-env.d.ts
+.env.local
