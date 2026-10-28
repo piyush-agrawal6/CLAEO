@@ -119,7 +119,21 @@ export const prompts = pgTable(
   ]
 );
 
-/** AI engines we track. Seeded via migration; enable/disable per engine. */
+/**
+ * AI engines we track. Seeded in migration 0002; enable/disable per engine.
+ *
+ * Honesty contract: `mode` describes what THIS deployment can legitimately
+ * measure —
+ * - `real`    a real adapter exists for a documented provider API
+ * - `mock`    deterministic sample data only (never shown as real)
+ * - `planned` no legitimate measurement source yet → shown as "coming soon"
+ * - `disabled` switched off by the operator
+ * The capability flags describe what the integration actually returns, so an
+ * engine without citation support can never contribute citation metrics.
+ */
+export const engineModes = ["real", "mock", "planned", "disabled"] as const;
+export type EngineMode = (typeof engineModes)[number];
+
 export const aiEngines = pgTable(
   "ai_engines",
   {
@@ -128,6 +142,17 @@ export const aiEngines = pgTable(
       .$defaultFn(() => crypto.randomUUID()),
     key: text("key").notNull(),
     name: text("name").notNull(),
+    /** Vendor behind the engine, e.g. "google", "openai", "perplexity". */
+    provider: text("provider"),
+    mode: text("mode").$type<EngineMode>().notNull().default("planned"),
+    /** True only when the integration returns explicit provider citations. */
+    supportsCitations: boolean("supports_citations").notNull().default(false),
+    /** True only when the integration performs live web search. */
+    supportsWebSearch: boolean("supports_web_search").notNull().default(false),
+    /** True only when results are retrieved live (not a static dataset). */
+    supportsLiveSearch: boolean("supports_live_search").notNull().default(false),
+    /** Free-text source note shown to users, e.g. "Gemini API (Google AI)". */
+    sourceDescription: text("source_description"),
     enabled: boolean("enabled").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },

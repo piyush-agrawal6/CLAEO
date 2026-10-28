@@ -29,6 +29,7 @@ const eslintConfig = defineConfig([
     "test-results/**",
     "playwright-report/**",
     "drizzle/**",
+    "optimus-the-ai-platform-to-build-and-ship/**",
   ]),
 ]);
 

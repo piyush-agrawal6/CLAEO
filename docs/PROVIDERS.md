@@ -1,6 +1,6 @@
 # Providers
 
-Two provider families feed Claeo:
+Two provider families feed QuerySide:
 
 1. **Search/visibility providers** — query AI engines and SEO data sources
    (`src/lib/providers/search/`, DataForSEO adapter in `src/lib/providers/dataforseo/`
@@ -33,7 +33,7 @@ validated with `visibilityObservationSchema` before persisting.
 | Implementation | Status | Condition |
 | --- | --- | --- |
 | `MockSearchVisibilityProvider` | ✅ built | `DATAFORSEO_MOCK_MODE=true` or test env |
-| DataForSEO / engine adapters | 🔜 phase 5 | throws `ConfigurationError` until then |
+| DataForSEO / engine adapters | ✅ shipped (Phase 3) | real HTTP client + Gemini/Groq adapters behind mock-mode factories — see `DATAFORSEO.md`, `AI_VISIBILITY.md` and `SCAN_ENGINE.md` |
 
 The mock is deterministic (FNV-1a seed over engine+prompt+domain) so dashboards
 and tests are stable, always sets `mocked: true`, and is force-disabled in

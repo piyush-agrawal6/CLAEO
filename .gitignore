@@ -41,3 +41,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# design reference template (not part of the app; safe to delete when no longer needed)
+/optimus-the-ai-platform-to-build-and-ship/

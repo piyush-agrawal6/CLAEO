@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   doublePrecision,
   index,
@@ -5,8 +6,10 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
-import { domains, prompts } from "@/lib/db/schema/domain";
+import { domains, competitors, prompts } from "@/lib/db/schema/domain";
+import { intelligenceScans } from "@/lib/db/schema/scans";
 
 /**
  * Page-level AEO/SEO audits and the prioritized Action Center.
@@ -81,6 +84,12 @@ export const recommendations = pgTable(
       .notNull()
       .references(() => domains.id, { onDelete: "cascade" }),
     promptId: text("prompt_id").references(() => prompts.id, { onDelete: "set null" }),
+    /** Competitor implicated in the evidence, when relevant. */
+    competitorId: text("competitor_id").references(() => competitors.id, { onDelete: "set null" }),
+    /** Scan whose persisted evidence produced this recommendation. */
+    sourceScanId: text("source_scan_id").references(() => intelligenceScans.id, {
+      onDelete: "set null",
+    }),
     category: text("category").notNull(),
     priority: text("priority").$type<RecommendationPriority>().notNull().default("medium"),
     /** 0-1 estimated impact — labeled "estimated" in the UI. */
@@ -92,6 +101,12 @@ export const recommendations = pgTable(
     action: text("action"),
     /** Supporting evidence (competitor mentions, citations, prompts). */
     evidence: jsonb("evidence").$type<Record<string, unknown>>(),
+    /**
+     * Deterministic de-duplication key (e.g. `brand_absent:{promptId}`), so
+     * re-running scans refreshes evidence instead of stacking duplicates.
+     * Null for legacy/manual rows.
+     */
+    dedupKey: text("dedup_key"),
     status: text("status").$type<RecommendationStatus>().notNull().default("open"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true })
@@ -102,6 +117,9 @@ export const recommendations = pgTable(
   (table) => [
     index("recommendations_domain_id_idx").on(table.domainId),
     index("recommendations_domain_status_idx").on(table.domainId, table.status),
+    uniqueIndex("recommendations_domain_dedup_unique")
+      .on(table.domainId, table.dedupKey)
+      .where(sql`"dedup_key" IS NOT NULL`),
   ]
 );
 

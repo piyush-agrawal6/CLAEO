@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import Link from "next/link";
 import { Alert } from "@/components/common/alert";
+import { AuthDivider, GoogleAuthButton } from "@/components/auth/google-auth-button";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -19,11 +20,15 @@ export function LoginForm({ callbackUrl, notice }: LoginFormProps) {
   const [state, formAction, pending] = useActionState(loginAction, initialAuthFormState);
 
   return (
-    <form action={formAction} className="space-y-4" noValidate>
+    <div className="space-y-4">
       {notice ? <Alert variant="success">{notice}</Alert> : null}
       {state.message ? <Alert variant="error">{state.message}</Alert> : null}
 
-      {callbackUrl ? <input type="hidden" name="callbackUrl" value={callbackUrl} /> : null}
+      <GoogleAuthButton callbackUrl={callbackUrl} />
+      <AuthDivider label="or continue with email" />
+
+      <form action={formAction} className="space-y-4" noValidate>
+        {callbackUrl ? <input type="hidden" name="callbackUrl" value={callbackUrl} /> : null}
 
       <div className="space-y-2">
         <Label htmlFor="email">Email</Label>
@@ -75,11 +80,12 @@ export function LoginForm({ callbackUrl, notice }: LoginFormProps) {
       </Button>
 
       <p className="text-muted-foreground text-center text-sm">
-        New to Claeo?{" "}
+        New to QuerySide?{" "}
         <Link href="/signup" className="text-primary underline-offset-4 hover:underline">
           Create an account
         </Link>
       </p>
-    </form>
+      </form>
+    </div>
   );
 }

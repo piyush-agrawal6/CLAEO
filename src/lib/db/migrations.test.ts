@@ -71,8 +71,75 @@ describe("database migrations", () => {
     expect(tables).toEqual(
       expect.arrayContaining(["page_audits", "audit_issues", "recommendations"])
     );
+    // Phase 3 intelligence (additive migration 0002)
+    expect(tables).toEqual(
+      expect.arrayContaining([
+        "intelligence_scans",
+        "scan_operations",
+        "keyword_metrics",
+        "serp_snapshots",
+        "serp_results",
+      ])
+    );
 
-    expect(tables.length).toBeGreaterThanOrEqual(22);
+    // Safety net against catastrophic regression (the named assertions above
+    // are the real inventory). 31 tables as of additive migration 0002 —
+    // raise this when a future migration legitimately adds tables.
+    expect(tables.length).toBeGreaterThanOrEqual(31);
+  });
+
+  it("seeds the AI engine registry with honest modes", async () => {
+    const engines = await db.select().from(schema.aiEngines);
+    expect(engines.length).toBeGreaterThanOrEqual(7);
+    const byKey = new Map(engines.map((e) => [e.key, e]));
+    // Real adapters exist for these two only; the rest are honestly "planned".
+    expect(byKey.get("gemini")?.mode).toBe("real");
+    expect(byKey.get("llama")?.mode).toBe("real");
+    for (const key of ["chatgpt", "perplexity", "google_ai_mode", "claude", "copilot"]) {
+      expect(byKey.get(key)?.mode).toBe("planned");
+      expect(byKey.get(key)?.supportsCitations).toBe(false);
+    }
+  });
+
+  it("enforces scan operation idempotency (unique scan + operation key)", async () => {
+    const now = new Date();
+    const user = (
+      await db
+        .insert(schema.users)
+        .values({
+          name: "Scan Owner",
+          email: `scan-owner-${now.getTime()}@example.com`,
+          passwordHash: "x",
+          emailVerified: now,
+        })
+        .returning()
+    )[0]!;
+    const workspace = (
+      await db
+        .insert(schema.workspaces)
+        .values({ name: "Scan WS", slug: `scan-ws-${now.getTime()}`, ownerId: user.id })
+        .returning()
+    )[0]!;
+    const domain = (
+      await db
+        .insert(schema.domains)
+        .values({
+          workspaceId: workspace.id,
+          domain: "https://scan.example.com",
+          normalizedDomain: "scan.example.com",
+        })
+        .returning()
+    )[0]!;
+    const scan = (
+      await db
+        .insert(schema.intelligenceScans)
+        .values({ workspaceId: workspace.id, domainId: domain.id })
+        .returning()
+    )[0]!;
+
+    const op = { scanId: scan.id, kind: "serp" as const, operationKey: "serp:example" };
+    await db.insert(schema.scanOperations).values(op);
+    await expect(db.insert(schema.scanOperations).values(op)).rejects.toThrow();
   });
 
   it("enforces workspace slug uniqueness at the database level", async () => {

@@ -18,6 +18,7 @@ import { auth } from "@/auth";
 
 const PROTECTED_PATHS = [
   "/dashboard",
+  "/onboarding",
   "/domains",
   "/settings",
   "/admin",

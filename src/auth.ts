@@ -4,6 +4,7 @@ import Google from "next-auth/providers/google";
 import { DrizzleAdapter } from "@auth/drizzle-adapter";
 import { z } from "zod";
 import { authConfig } from "@/auth.config";
+import { createQuerysideAdapter } from "@/auth-adapter";
 import { getDb } from "@/lib/db";
 import { accounts, sessions, users, verificationTokens } from "@/lib/db/schema";
 import { env } from "@/lib/env";
@@ -28,18 +29,31 @@ const credentialsSchema = z.object({
 
 const googleConfigured = Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET);
 
+/**
+ * Whether the Google provider can actually start a sign-in. The UI shows
+ * the "Continue with Google" button unconditionally; without credentials
+ * the attempt fails fast with a friendly `/login?error=Configuration`.
+ */
+export { googleConfigured as googleAuthConfigured };
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
   // The adapter manages OAuth accounts/sessions tables; credentials logins
   // use JWTs and do not write session rows. Without a configured database
   // (e.g. during builds) the adapter is simply not attached.
+  //
+  // `createQuerysideAdapter` wraps it so OAuth provisioning (user + account
+  // + workspace + owner membership) happens in ONE transaction — see
+  // `src/auth-adapter.ts`.
   adapter: env.DATABASE_URL
-    ? DrizzleAdapter(getDb(), {
-        usersTable: users,
-        accountsTable: accounts,
-        sessionsTable: sessions,
-        verificationTokensTable: verificationTokens,
-      })
+    ? createQuerysideAdapter(
+        DrizzleAdapter(getDb(), {
+          usersTable: users,
+          accountsTable: accounts,
+          sessionsTable: sessions,
+          verificationTokensTable: verificationTokens,
+        })
+      )
     : undefined,
   providers: [
     Credentials({
@@ -85,7 +99,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           Google({
             clientId: env.GOOGLE_CLIENT_ID,
             clientSecret: env.GOOGLE_CLIENT_SECRET,
-            allowDangerousEmailAccountLinking: false,
+            // Account linking (documented in docs/GOOGLE_OAUTH.md):
+            // Auth.js's default refuses to link a Google profile to an
+            // existing email/password account (OAuthAccountNotLinked).
+            // We enable linking here because the shared `signIn` callback
+            // in `auth.config.ts` has ALREADY required Google's
+            // `email_verified === true` on the raw OIDC profile before
+            // handle-login ever reads this flag — linking happens only
+            // for provider-verified emails, never on client claims.
+            allowDangerousEmailAccountLinking: true,
           }),
         ]
       : []),

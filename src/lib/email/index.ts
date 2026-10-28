@@ -65,7 +65,7 @@ export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult>
 
   try {
     const resend = getResend();
-    const from = env.EMAIL_FROM?.trim() || "Claeo <onboarding@resend.dev>";
+    const from = env.EMAIL_FROM?.trim() || "QuerySide <onboarding@resend.dev>";
     const { error } = await resend.emails.send({
       from,
       to: input.to,

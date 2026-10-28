@@ -47,8 +47,9 @@ const serverSchema = z.object({
   // DataForSEO
   DATAFORSEO_LOGIN: optionalString,
   DATAFORSEO_PASSWORD: optionalString,
-  DATAFORSEO_SANDBOX_MODE: booleanish.default(true),
   DATAFORSEO_MOCK_MODE: booleanish.default(true),
+  DATAFORSEO_BASE_URL: z.string().url().default("https://api.dataforseo.com"),
+  DATAFORSEO_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(120_000).default(30_000),
 
   // AI providers
   GEMINI_API_KEY: optionalString,
@@ -73,13 +74,41 @@ const serverSchema = z.object({
   MAX_DOMAIN_SCANS_PER_DAY: z.coerce.number().int().min(0).default(10),
   MAX_DAILY_PROVIDER_SPEND_USD: z.coerce.number().min(0).default(5),
 
+  // Scan engine caps (Phase 3). Bounds are Zod-enforced so a hostile env
+  // value cannot turn a scan into an unbounded provider spend. Dev defaults
+  // keep one default scan at roughly $0.02 in DataForSEO data (plus up to 20
+  // counter-bounded AI requests) and total dev spend under ~$0.25 without
+  // explicit approval (see docs/PROVIDER_COSTS.md).
+  MAX_DATAFORSEO_REQUESTS_PER_SCAN: z.coerce.number().int().min(0).max(50).default(5),
+  MAX_AI_REQUESTS_PER_SCAN: z.coerce.number().int().min(0).max(100).default(20),
+  MAX_PROVIDER_SPEND_PER_SCAN_USD: z.coerce.number().min(0).max(10).default(0.1),
+  MAX_KEYWORDS_PER_SEARCH_SCAN: z.coerce.number().int().min(1).max(20).default(10),
+  MAX_SERP_KEYWORDS_PER_SCAN: z.coerce.number().int().min(0).max(20).default(5),
+  MAX_AI_PROMPTS_PER_SCAN: z.coerce.number().int().min(0).max(50).default(10),
+  MAX_AI_ENGINES_PER_SCAN: z.coerce.number().int().min(1).max(6).default(2),
+  MAX_STORED_AI_ANSWER_CHARS: z.coerce.number().int().min(500).max(200_000).default(20_000),
+  /** Wall-clock budget for one scan worker pass; scans resume across passes. */
+  SCAN_WORKER_TIME_BUDGET_MS: z.coerce.number().int().min(1_000).max(120_000).default(8_000),
+
+  // Test safety: live provider checks in the test suite are opt-in only and
+  // FORCE-DISABLED in production by src/lib/env.ts hardening.
+  ALLOW_LIVE_PROVIDER_TESTS: booleanish.default(false),
+
+  // Website crawler (SSRF-guarded; every cap is bounded by Zod so a hostile
+  // env value cannot turn the crawler into an unbounded fetcher).
+  CRAWLER_MAX_PAGES: z.coerce.number().int().min(1).max(50).default(10),
+  CRAWLER_MAX_BYTES_PER_PAGE: z.coerce.number().int().min(1_000).max(2_000_000).default(500_000),
+  CRAWLER_MAX_REDIRECTS: z.coerce.number().int().min(0).max(10).default(5),
+  CRAWLER_MAX_DURATION_MS: z.coerce.number().int().min(1_000).max(300_000).default(60_000),
+  CRAWLER_PAGE_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(60_000).default(10_000),
+
   // Observability
   LOG_LEVEL: z.enum(["debug", "info", "warn", "error", "silent"]).default("info"),
 });
 
 const clientSchema = z.object({
   NEXT_PUBLIC_APP_URL: z.string().url().default("http://localhost:3000"),
-  NEXT_PUBLIC_APP_NAME: z.string().min(1).default("Claeo"),
+  NEXT_PUBLIC_APP_NAME: z.string().min(1).default("QuerySide"),
   NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: optionalString,
   NEXT_PUBLIC_MOCK_MODE: booleanish.default(false),
 });
@@ -133,6 +162,7 @@ export function applyProductionHardening<E extends Env>(input: E, nodeEnv: Env["
     DATAFORSEO_MOCK_MODE: false,
     AUTH_DEV_AUTO_VERIFY: false,
     NEXT_PUBLIC_MOCK_MODE: false,
+    ALLOW_LIVE_PROVIDER_TESTS: false,
   };
 }
 

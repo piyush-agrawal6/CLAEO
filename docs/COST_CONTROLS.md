@@ -1,7 +1,7 @@
 # Cost Controls
 
 Provider spend is a product-level risk: a bug, a loop or a compromised
-account must not be able to drain the DataForSEO/LLM budget. Claeo enforces
+account must not be able to drain the DataForSEO/LLM budget. QuerySide enforces
 budget at the application layer — independent of provider-side limits.
 
 ## The guard: `canPerformPaidOperation()`
@@ -56,11 +56,49 @@ Recording failures are logged, never fatal to the caller.
 - The mock provider is skipped by the guard entirely (`isMocked` short-circuit)
   because it costs nothing — but it still labels output `mocked: true`.
 
+## Per-scan budget (Phase 3)
+
+Every scan is capped twice — at plan time and during execution
+([SCAN_ENGINE.md](SCAN_ENGINE.md)). All caps are Zod-bounded in
+`src/lib/env.ts`:
+
+| Env var | Default | Bounds |
+| --- | --- | --- |
+| `MAX_PROVIDER_SPEND_PER_SCAN_USD` | 0.10 | worker stops claiming operations at the cap (max 10) |
+| `MAX_DATAFORSEO_REQUESTS_PER_SCAN` | 5 | 1 keyword-overview batch + ≤ 4 live SERPs |
+| `MAX_AI_REQUESTS_PER_SCAN` | 20 | prompts × engines, hard-capped |
+| `MAX_KEYWORDS_PER_SEARCH_SCAN` | 10 | keywords in the ONE overview batch |
+| `MAX_SERP_KEYWORDS_PER_SCAN` | 5 | live SERP checks (one billed request each) |
+| `MAX_AI_PROMPTS_PER_SCAN` | 10 | prompts observed per scan |
+| `MAX_AI_ENGINES_PER_SCAN` | 2 | engines per prompt |
+| `SCAN_WORKER_TIME_BUDGET_MS` | 8000 | wall-clock budget per worker pass |
+
+- **Spend-cap skip:** before each operation the worker compares accumulated
+  `providerCostUsd` against the cap; remaining pending operations are marked
+  `skipped` with `errorClass: SPEND_CAP` — an explicit, visible outcome,
+  never a silent overspend.
+- **Plan rate limit:** `startScanAction` rate-limits scan starts per
+  workspace against the plan's `scansPerDay` (free 1/day … agency 100/day)
+  before any planning happens; resumes are separately limited (30/hour).
+- **Caching:** identical DataForSEO requests are served from Redis (keyword
+  metrics 7 days, SERP snapshots 24 hours — [DATAFORSEO.md](DATAFORSEO.md)).
+  A cache hit makes **no provider request**: it is recorded with
+  `cache_hit=true`, units 0 and estimated cost 0, and consumes no guard
+  budget.
+- **Zero-spend by construction:** with mock providers (the dev default) a
+  full scan consumes no guard counters and records exactly $0.0000 —
+  asserted by `scan.test.ts`.
+- A default dev scan with real providers costs ≈ **$0.02** in DataForSEO
+  data plus up to 20 counter-bounded AI requests — worked example:
+  [PROVIDER_COSTS.md](PROVIDER_COSTS.md).
+
 ## UI/plan limits
 
-- Plan entitlements (`PLAN_LIMITS` in `lib/usage/limits.ts`): domains, prompts,
-  engines, refresh interval, scans/day, seats. Enforced today on domain
-  creation; billing enforcement activates with the billing phase.
+- Plan entitlements (`PLAN_LIMITS` in `lib/usage/limits.ts`): domains,
+  prompts, competitors, engines, refresh interval, scans/day, seats.
+  Enforced today on domain, prompt and competitor creation, and on scan
+  starts (`scansPerDay`); billing enforcement activates with the billing
+  phase.
 - `remainingToday(operation)` powers honest "N requests left today" displays.
 
 ## Operational runbook

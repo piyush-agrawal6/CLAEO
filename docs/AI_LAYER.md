@@ -47,9 +47,11 @@ interface AIProvider {
 ```
 
 - **`MockAIProvider`** — deterministic, free, always flags `mocked: true`.
-- **Gemini / Groq adapters** — scheduled for the AI-layer phase; until they
-  exist, non-mock mode fails with a clear `ConfigurationError`
-  (fail loudly, never fabricate).
+- **Gemini / Groq adapters** — ✅ shipped (Phase 3): `GeminiAdapter` (Google
+  `generativelanguage` v1beta) and `GroqAdapter` (Llama 3.3 70B) resolve at
+  runtime from the `ai_engines` registry; unconfigured or planned engines
+  fail with a clear `ConfigurationError`/unavailable status
+  (fail loudly, never fabricate). See `AI_VISIBILITY.md`.
 
 ## Mock fixtures — no magic, no invention
 

@@ -3,12 +3,21 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireUserContext } from "@/lib/auth/session";
+import { env } from "@/lib/env";
+import { rateLimit } from "@/lib/security/rate-limit";
 import { normalizeDomain } from "@/lib/utils";
-import { countDomains, createDomain, deleteDomain, listDomains } from "@/server/repositories/domain-repository";
+import {
+  countDomains,
+  createDomain,
+  deleteDomain,
+  getDomainById,
+  listDomains,
+} from "@/server/repositories/domain-repository";
 import { getMembershipForUser } from "@/server/repositories/workspace-repository";
 import { getPlanLimits } from "@/lib/usage/limits";
 import { reportError } from "@/lib/errors";
 import { recordAuditLog } from "@/server/repositories/audit-repository";
+import { runDomainAnalysis } from "@/server/services/site-analysis-service";
 import type { DomainActionState } from "@/features/domains/schemas";
 
 /**
@@ -120,4 +129,52 @@ export async function deleteDomainAction(formData: FormData): Promise<void> {
     });
     revalidatePath("/domains");
   }
+}
+
+/**
+ * Runs (or re-runs) the SSRF-guarded analysis crawl for a domain from the
+ * domain overview. Does NOT touch onboarding state — safe for completed and
+ * legacy (pre-onboarding) workspaces. Failures are persisted on the crawl
+ * job and shown honestly on the overview; the manual paths stay open.
+ */
+export async function analyzeDomainAction(formData: FormData): Promise<void> {
+  try {
+    const user = await requireUserContext();
+    const membership = await getMembershipForUser(user.id);
+    if (!membership) return;
+    const workspaceId = membership.workspace.id;
+
+    const domainId = String(formData.get("id") ?? "");
+    if (!domainId) return;
+    const domain = await getDomainById(workspaceId, domainId);
+    if (!domain) return;
+
+    const limit = await rateLimit({
+      key: `domain:crawl:ws:${workspaceId}`,
+      limit: env.MAX_DOMAIN_SCANS_PER_DAY,
+      windowSeconds: 86400,
+    });
+    if (!limit.allowed) return;
+
+    const outcome = await runDomainAnalysis({ workspaceId, domain });
+    await recordAuditLog({
+      userId: user.id,
+      workspaceId,
+      action: "domain.analysis_requested",
+      targetType: "domain",
+      targetId: domain.id,
+      metadata: {
+        jobId: outcome.jobId,
+        status: outcome.status,
+        pagesCrawled: outcome.pagesCrawled,
+        pagesRead: outcome.pagesRead,
+        pagesBlocked: outcome.pagesBlocked,
+      },
+    });
+  } catch (error) {
+    reportError(error, { action: "analyzeDomain" });
+  }
+  revalidatePath("/domains");
+  const id = String(formData.get("id") ?? "");
+  if (id) revalidatePath(`/domains/${id}`);
 }

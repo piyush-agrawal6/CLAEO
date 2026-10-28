@@ -51,7 +51,7 @@ export function renderEmailLayout(
       <tr><td align="center">
         <table role="presentation" width="100%" style="max-width:520px;background:${COLORS.card};border:1px solid ${COLORS.border};border-radius:10px;padding:32px">
           <tr><td>
-            <p style="margin:0 0 4px;font-size:13px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:${COLORS.accent}">Claeo</p>
+            <p style="margin:0 0 4px;font-size:13px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:${COLORS.accent}">QuerySide</p>
             <h1 style="margin:0 0 16px;font-size:20px;color:${COLORS.text}">${escapeHtml(input.heading)}</h1>
             <div style="font-size:15px;line-height:1.6;color:${COLORS.text}">${input.body}</div>
             ${actionHtml}

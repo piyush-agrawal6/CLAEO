@@ -12,7 +12,6 @@ describe("env", () => {
   it("defaults provider modes to mock under test", () => {
     expect(env.AI_MOCK_MODE).toBe(true);
     expect(env.DATAFORSEO_MOCK_MODE).toBe(true);
-    expect(env.DATAFORSEO_SANDBOX_MODE).toBe(true);
   });
 
   it("uses configurable model names, never hardcoded ones", () => {

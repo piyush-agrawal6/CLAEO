@@ -21,6 +21,7 @@ vi.mock("next/link", () => ({
 
 vi.mock("@/features/auth/actions", () => ({
   loginAction: vi.fn(async (state: unknown) => state),
+  signInWithGoogleAction: vi.fn(async () => undefined),
 }));
 
 describe("LoginForm", () => {
@@ -36,6 +37,13 @@ describe("LoginForm", () => {
     expect(
       (screen.getByLabelText("Password") as HTMLInputElement).type
     ).toBe("password");
+  });
+
+  it("offers Continue with Google above an email divider", () => {
+    render(<LoginForm />);
+
+    expect(screen.getByRole("button", { name: /continue with google/i })).toBeDefined();
+    expect(screen.getByText("or continue with email")).toBeDefined();
   });
 
   it("links to password recovery and signup", () => {

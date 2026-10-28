@@ -3,11 +3,17 @@ import { setupTestDb, type TestDb } from "@/lib/db/test-db";
 import { getDb } from "@/lib/db";
 import { workspaceMembers, workspaces, users } from "@/lib/db/schema";
 import { ConflictError } from "@/lib/errors";
-import { createUserWithWorkspace } from "@/server/services/user-service";
+import {
+  createUserWithWorkspace,
+  withSlugCollisionRetry,
+  MAX_SLUG_INSERT_ATTEMPTS,
+  isSlugCollision,
+  nextSlugCandidate,
+} from "@/server/services/user-service";
 import { findUserByEmail } from "@/server/repositories/user-repository";
 import { getMembershipForUser } from "@/server/repositories/workspace-repository";
 import { verifyPassword } from "@/lib/security/password";
-import { eq } from "drizzle-orm";
+import { eq, like } from "drizzle-orm";
 
 describe("createUserWithWorkspace (PGlite)", () => {
   let testDb: TestDb;
@@ -112,5 +118,117 @@ describe("createUserWithWorkspace (PGlite)", () => {
 
     const nonMember = await getMembershipForUser("does-not-exist");
     expect(nonMember).toBeNull();
+  });
+
+  // ---------------------------------------------------------------------
+  // Slug concurrency: the DB unique constraint is the arbiter, and the
+  // insert retries with the next candidate on collision (TOCTOU fix).
+  // ---------------------------------------------------------------------
+
+  it("withSlugCollisionRetry retries with the next candidate on a slug collision", async () => {
+    // Simulate the race outcome: another signup grabbed "racebase" AFTER our
+    // availability pre-check returned it as free, so the FIRST insert attempt
+    // raises 23505 on workspaces_slug_unique and the retry must use "racebase-2".
+    const attempts: string[] = [];
+    const result = await withSlugCollisionRetry("racebase", async (slug) => {
+      attempts.push(slug);
+      if (attempts.length === 1) {
+        // Real PGlite/pg error shape: SQLSTATE + constraint name.
+        throw Object.assign(new Error('duplicate key value violates unique constraint "workspaces_slug_unique"'), {
+          code: "23505",
+          constraint: "workspaces_slug_unique",
+        });
+      }
+      return { slug };
+    });
+
+    expect(attempts).toEqual(["racebase", "racebase-2"]);
+    expect(result.slug).toBe("racebase-2");
+  });
+
+  it("withSlugCollisionRetry unwraps a drizzle-wrapped (cause-chain) collision", async () => {
+    // Drizzle surfaces driver failures as DrizzleQueryError with the SQLSTATE
+    // on `.cause`; the retry must still recognize it as a slug collision.
+    const inner = Object.assign(new Error("duplicate key value violates unique constraint"), {
+      code: "23505",
+      constraint: "workspaces_slug_unique",
+    });
+    const wrapped = Object.assign(new Error("Failed query"), { cause: inner });
+
+    let calls = 0;
+    const result = await withSlugCollisionRetry("wrapped", async (slug) => {
+      calls += 1;
+      if (calls === 1) throw wrapped;
+      return { slug };
+    });
+
+    expect(calls).toBe(2);
+    expect(result.slug).toBe("wrapped-2");
+  });
+
+  it("withSlugCollisionRetry gives up after the bounded attempt count", async () => {
+    const slugErr = Object.assign(new Error("duplicate key"), {
+      code: "23505",
+      constraint: "workspaces_slug_unique",
+    });
+    let calls = 0;
+
+    await expect(
+      withSlugCollisionRetry("busy", async () => {
+        calls += 1;
+        throw slugErr;
+      })
+    ).rejects.toThrow(/unique workspace slug/);
+
+    expect(calls).toBe(MAX_SLUG_INSERT_ATTEMPTS);
+  });
+
+  it("two concurrent same-domain signups get distinct slugs and both succeed", async () => {
+    const [a, b] = await Promise.all([
+      createUserWithWorkspace({
+        name: "Concurrent A",
+        email: "a@concurrent-corp.com",
+        password: "Sup3rSecret!",
+      }),
+      createUserWithWorkspace({
+        name: "Concurrent B",
+        email: "b@concurrent-corp.com",
+        password: "Sup3rSecret!",
+      }),
+    ]);
+
+    const db = getDb();
+    const slugs = (
+      await db
+        .select({ slug: workspaces.slug })
+        .from(workspaces)
+        .where(like(workspaces.slug, "concurrent-corp%"))
+    ).map((r) => r.slug);
+
+    expect(slugs).toHaveLength(2);
+    expect(new Set(slugs).size).toBe(2);
+    expect(slugs.sort()).toEqual(["concurrent-corp", "concurrent-corp-2"]);
+    expect(a.workspaceId).not.toBe(b.workspaceId);
+  });
+
+  it("nextSlugCandidate walks base, base-2, base-3", () => {
+    expect(nextSlugCandidate("acme", 0)).toBe("acme");
+    expect(nextSlugCandidate("acme", 1)).toBe("acme-2");
+    expect(nextSlugCandidate("acme", 2)).toBe("acme-3");
+  });
+
+  it("isSlugCollision matches only the workspace slug constraint", () => {
+    expect(isSlugCollision({ code: "23505", constraint: "workspaces_slug_unique" })).toBe(
+      true
+    );
+    // A different unique constraint (e.g. users email) must NOT be retried.
+    expect(isSlugCollision({ code: "23505", constraint: "users_email_unique" })).toBe(
+      false
+    );
+    expect(isSlugCollision({ code: "23503", constraint: "workspaces_slug_unique" })).toBe(
+      false
+    );
+    expect(isSlugCollision(new Error("boom"))).toBe(false);
+    expect(isSlugCollision(null)).toBe(false);
   });
 });

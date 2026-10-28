@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { GlobeIcon, Trash2Icon } from "lucide-react";
 import { EmptyState } from "@/components/common/empty-state";
 import { Badge } from "@/components/ui/badge";
@@ -43,7 +44,12 @@ export function DomainList({ domains }: { domains: Domain[] }) {
             className="flex items-center justify-between gap-4 px-6 py-4"
           >
             <div className="min-w-0">
-              <p className="truncate text-sm font-medium">{domain.normalizedDomain}</p>
+              <Link
+                href={`/domains/${domain.id}`}
+                className="truncate text-sm font-medium hover:underline"
+              >
+                {domain.normalizedDomain}
+              </Link>
               <p className="text-muted-foreground truncate text-xs">
                 {domain.name ?? domain.domain} · added{" "}
                 {new Intl.DateTimeFormat("en", {

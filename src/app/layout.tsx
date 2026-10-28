@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, Instrument_Serif } from "next/font/google";
 import { Toaster } from "sonner";
 import { ThemeProvider } from "@/components/theme-provider";
 import { env } from "@/lib/env";
@@ -15,20 +15,38 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+/** Editorial display face for marketing headlines ("large editorial type"). */
+const instrumentSerif = Instrument_Serif({
+  variable: "--font-instrument-serif",
+  subsets: ["latin"],
+  weight: "400",
+  style: ["normal", "italic"],
+});
+
+const SITE_NAME = "QuerySide";
+const SITE_TITLE = "QuerySide — SEO & AI Search Intelligence Platform";
+const SITE_DESCRIPTION =
+  "Track and improve your visibility across Google, ChatGPT, Gemini, Perplexity and AI search with competitor, citation and SEO intelligence.";
+
 export const metadata: Metadata = {
   metadataBase: new URL(env.NEXT_PUBLIC_APP_URL),
   title: {
-    default: "Claeo - AI Search Visibility Optimization",
-    template: "%s | Claeo",
+    default: SITE_TITLE,
+    template: `%s | ${SITE_NAME}`,
   },
-  description:
-    "See where your brand appears in AI answers - ChatGPT, Perplexity, Gemini and more - and get a prioritized list of exactly what to fix next.",
+  description: SITE_DESCRIPTION,
+  applicationName: SITE_NAME,
   openGraph: {
-    title: "Claeo - AI Search Visibility Optimization",
-    description:
-      "Measure, diagnose and improve your brand's visibility across AI search engines.",
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
     type: "website",
-    siteName: "Claeo",
+    siteName: SITE_NAME,
+    locale: "en_US",
+  },
+  twitter: {
+    card: "summary",
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
   },
   robots: { index: true, follow: true },
 };
@@ -38,10 +56,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${instrumentSerif.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col">
         <ThemeProvider>{children}</ThemeProvider>
+        {/* Scroll-reveal content is hidden in SSR; without JS the noscript
+            override keeps every section readable (progressive enhancement). */}
+        <noscript>
+          <style>{`.reveal{opacity:1!important;transform:none!important}`}</style>
+        </noscript>
         <Toaster position="top-center" richColors closeButton />
       </body>
     </html>

@@ -1,13 +1,21 @@
-# Claeo
+# QuerySide
 
-**AI Search Visibility Optimization (AEO + GEO + AI Visibility) for marketing teams.**
+**Search intelligence on your side.**
 
-Claeo tracks how ChatGPT, Perplexity, Gemini and other AI engines answer questions
-about your market, then turns every visibility gap into a prioritized action:
-what to fix first, and which competitor evidence backs it.
+QuerySide is an SEO + AEO + GEO + AI search intelligence platform. It tracks how
+your brand appears across Google and AI answer engines (ChatGPT, Gemini,
+Perplexity, Google AI), shows why competitors win, and turns every visibility
+gap into a prioritized action: what to fix first, and which competitor evidence
+backs it.
 
-> **Status:** Phase 0 (foundation) and Phase 1 (authentication) are complete.
-> See [docs/MVP_ROADMAP.md](docs/MVP_ROADMAP.md) for the phase-by-phase plan.
+> **Status:** Phases 0–3 are complete: foundation (0), authentication +
+> marketing site (1), onboarding & discovery (2), and **intelligent search
+> (3)** — real DataForSEO search data, a real AI visibility engine and the
+> intelligence product pages (dashboard, AI visibility, prompts, competitors,
+> citations, action center). See [docs/MVP_ROADMAP.md](docs/MVP_ROADMAP.md)
+> for the phase-by-phase plan, [docs/PHASE_3.md](docs/PHASE_3.md) for the
+> Phase 3 summary and [docs/DESIGN_SYSTEM.md](docs/DESIGN_SYSTEM.md)
+> for the QuerySide brand/design contract.
 
 ---
 
@@ -74,9 +82,14 @@ by Zod at `src/lib/env.ts`. Highlights:
 
 - **Mocks are the default:** `AI_MOCK_MODE=true`, `DATAFORSEO_MOCK_MODE=true` —
   development never calls a paid provider.
-- **Cost guards:** `MAX_DATAFORSEO_REQUESTS_PER_DAY=25`,
+- **Cost guards:** daily `MAX_DATAFORSEO_REQUESTS_PER_DAY=25`,
   `MAX_LLM_REQUESTS_PER_DAY=100`, `MAX_DOMAIN_SCANS_PER_DAY=10`,
-  `MAX_DAILY_PROVIDER_SPEND_USD=5`.
+  `MAX_DAILY_PROVIDER_SPEND_USD=5`, plus per-scan caps
+  (`MAX_PROVIDER_SPEND_PER_SCAN_USD=0.10`, `MAX_DATAFORSEO_REQUESTS_PER_SCAN=5`,
+  `MAX_AI_REQUESTS_PER_SCAN=20`, …) — a default dev scan is ~$0.02 of
+  DataForSEO data, and $0 with mocks. Details:
+  [docs/COST_CONTROLS.md](docs/COST_CONTROLS.md),
+  [docs/PROVIDER_COSTS.md](docs/PROVIDER_COSTS.md).
 - `.env.local` is gitignored; `.env.example` is committed with empty values.
 
 ## Cost controls
@@ -103,16 +116,19 @@ Details: [docs/SECURITY.md](docs/SECURITY.md).
 
 ```
 src/
-  app/                 Routes: landing, (auth)/, (app)/, api/, error boundaries
+  app/                 Routes: landing page, (auth)/, (app)/, api/, error boundaries
   auth.ts, auth.config.ts, proxy.ts
-  components/          UI kit (ui/), layout shell, feature components
-  features/            Server actions + queries per feature (auth, domains, settings)
-  lib/                 env, db, redis, security, usage guards, ai, providers,
-                       email, logging, errors, auth session helpers
-  server/              repositories (workspace-scoped), services, jobs
+  components/          UI kit (ui/), layout shell, marketing system (marketing/),
+                       feature components
+  features/            Server actions + queries per feature (auth, domains,
+                        onboarding, prompts, competitors, intelligence, settings)
+  lib/                 env, db, redis, security, usage guards, ai, providers
+                       (dataforseo, ai), email, logging, errors, session helpers
+  server/              repositories (workspace-scoped), services (incl. the
+                        scan engine), jobs
 drizzle/               Generated SQL migrations (committed)
 e2e/                   Playwright specs
-docs/                  Architecture and phase documentation
+docs/                  Architecture, design system and phase documentation
 ```
 
 ## Documentation
@@ -120,12 +136,18 @@ docs/                  Architecture and phase documentation
 | Document | Contents |
 | --- | --- |
 | [ARCHITECTURE](docs/ARCHITECTURE.md) | Layers, request flow, module boundaries |
+| [DESIGN_SYSTEM](docs/DESIGN_SYSTEM.md) | QuerySide brand, marketing design system, UI rules |
 | [DATABASE](docs/DATABASE.md) | Schema, migrations, workspace scoping |
 | [PROVIDERS](docs/PROVIDERS.md) | Provider abstraction and mock-first policy |
-| [DATAFORSEO](docs/DATAFORSEO.md) | SERP/SEO data integration plan and costs |
+| [DATAFORSEO](docs/DATAFORSEO.md) | DataForSEO HTTP client, cache, costs |
 | [AI_LAYER](docs/AI_LAYER.md) | AIService, structured output, injection guard |
+| [SCAN_ENGINE](docs/SCAN_ENGINE.md) | Scan planning, idempotent worker, finalization |
+| [AI_VISIBILITY](docs/AI_VISIBILITY.md) | Engine registry, Gemini/Groq adapters, mention detection |
+| [SCORING](docs/SCORING.md) | Visibility formulas, coverage, null-score semantics |
+| [PROVIDER_COSTS](docs/PROVIDER_COSTS.md) | Per-request cost estimates and per-scan budget |
 | [SECURITY](docs/SECURITY.md) | Threat model and implemented controls |
 | [COST_CONTROLS](docs/COST_CONTROLS.md) | Budget guards, kill switches, limits |
+| [PHASE_3](docs/PHASE_3.md) | Phase 3 summary: what shipped, honesty invariants, caps |
 | [MVP_ROADMAP](docs/MVP_ROADMAP.md) | Phase-by-phase delivery plan |
 | [TESTING](docs/TESTING.md) | Test strategy and how to run each layer |
 | [DEPLOYMENT](docs/DEPLOYMENT.md) | Vercel setup, env, migrations, checks |

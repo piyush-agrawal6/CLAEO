@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import Link from "next/link";
 import { Alert } from "@/components/common/alert";
+import { AuthDivider, GoogleAuthButton } from "@/components/auth/google-auth-button";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -33,9 +34,13 @@ export function SignupForm() {
   }
 
   return (
-    <form action={formAction} className="space-y-4" noValidate>
+    <div className="space-y-4">
       {state.message ? <Alert variant="error">{state.message}</Alert> : null}
 
+      <GoogleAuthButton />
+      <AuthDivider label="or create account with email" />
+
+      <form action={formAction} className="space-y-4" noValidate>
       <div className="space-y-2">
         <Label htmlFor="name">Name</Label>
         <Input
@@ -103,6 +108,7 @@ export function SignupForm() {
           Sign in
         </Link>
       </p>
-    </form>
+      </form>
+    </div>
   );
 }

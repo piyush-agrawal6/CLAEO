@@ -1,6 +1,6 @@
 # Architecture
 
-Claeo is a Next.js App Router application with a strict layering model: routes
+QuerySide is a Next.js App Router application with a strict layering model: routes
 delegate to features, features delegate to services/repositories, and all
 external I/O goes through provider modules with enforced cost guards.
 
@@ -23,11 +23,12 @@ external I/O goes through provider modules with enforced cost guards.
 │ Server core (src/server)                                        │
 │   repositories   workspace-scoped persistence (IDOR-safe)        │
 │   services       multi-aggregate operations (signup, tokens)     │
+│   services/scan  plan → worker passes → finalize (Phase 3)      │
 │   jobs           queue + workers (phases 4+)                    │
 ├─────────────────────────────────────────────────────────────────┤
 │ Libraries (src/lib)                                             │
-│   env · db · redis · security · usage · ai · providers/search    │
-│   email · logging · errors · auth/session · utils               │
+│   env · db · redis · security · usage · ai · providers          │
+│   (dataforseo, ai) · email · logging · errors · auth/session    │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -88,7 +89,63 @@ never the security boundary.
 | Errors | `lib/errors.ts` | AppError taxonomy + `toApiErrorResponse` |
 | Logging | `lib/logging/logger.ts` | JSON lines, recursive redaction |
 | AI | `lib/ai/service.ts` | Only AI entry point for business logic |
-| Search data | `lib/providers/search/` | DataForSEO abstraction (mock-first) |
+| Search data | `lib/providers/dataforseo/` | DataForSEO HTTP client (Zod-validated, cached, mock-first) — [DATAFORSEO.md](DATAFORSEO.md) |
+| AI engines | `lib/providers/ai/` | Engine registry + Gemini/Groq adapters + labeled mock — [AI_VISIBILITY.md](AI_VISIBILITY.md) |
+| Scan engine | `server/services/scan/` | plan → idempotent operations → worker passes → finalize — [SCAN_ENGINE.md](SCAN_ENGINE.md) |
+| Scoring | `lib/scoring/` | Versioned visibility formulas, null-score semantics — [SCORING.md](SCORING.md) |
+
+## Phase 3 layers (intelligent search)
+
+Phase 3 added three layers on top of the rules above. All of them are
+documented in dedicated docs; this is the map.
+
+**Provider adapters** (`src/lib/providers/`)
+
+- `dataforseo/` — a real HTTP client for two DataForSEO Live endpoints
+  (keyword overview + organic SERP). Every response is parsed with strict
+  Zod schemas, normalized to provider-independent shapes, classified into
+  typed error classes, retried only where safe, and cached in Redis.
+  Guard-before / record-after runs on every call. A deterministic mock is
+  the development default ([DATAFORSEO.md](DATAFORSEO.md)).
+- `ai/` — the engine registry is the source of truth for what is measurable.
+  Each row in `ai_engines` carries an honesty mode (`real` / `mock` /
+  `planned` / `disabled`) and a human-readable reason. Two real adapters
+  exist today (Gemini, Groq); everything else is honestly labeled
+  "coming soon" and is never scannable. Mention detection is deterministic,
+  never an LLM ([AI_VISIBILITY.md](AI_VISIBILITY.md)).
+
+**Scan engine** (`src/server/services/scan/`)
+
+```
+buildScanPlan          caps every provider-facing list (Zod-bounded env)
+  → scan_operations    deterministic, idempotent work items (unique per scan)
+  → runScanPass        claims the scan atomically; runs pending ops inside a
+                       wall-clock budget (SCAN_WORKER_TIME_BUDGET_MS) and a
+                       per-scan spend cap; cancellation and crashes are safe
+  → finalizeScan       scores from persisted evidence, competitor discovery,
+                       deterministic recommendations, honest status
+```
+
+See [SCAN_ENGINE.md](SCAN_ENGINE.md) for the full contract.
+
+**Intelligence features and pages**
+
+- `src/features/intelligence/` — server actions (`startScanAction`,
+  `resumeScanAction`, `cancelScanAction`, `setRecommendationStatusAction`)
+  and the read models every intelligence page consumes. Scans start only
+  from an explicit two-step-confirm button press in `ScanLauncher`; nothing
+  runs on page load, login, navigation or startup.
+- `src/features/prompts/`, `src/features/competitors/` — tracking CRUD with
+  plan caps.
+- Pages: `/dashboard`, `/ai-visibility`, `/prompts`, `/competitors`,
+  `/citations`, `/actions`. Site Audit and Analytics remain "Soon" in the nav.
+
+**Honesty architecture.** The rules in the top section are enforced
+structurally, not by convention: metric columns are nullable (absence is
+`null`, never a fabricated 0), every evidence row carries a `mocked` flag,
+scores are stored with a formula version and coverage counts so history
+stays interpretable, and a `null` score renders as "not enough data" — never
+a silent zero ([SCORING.md](SCORING.md)).
 
 ## Styling system
 

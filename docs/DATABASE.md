@@ -14,7 +14,7 @@ PostgreSQL (Neon in production) via Drizzle ORM. All schema lives in
 - Enums implemented as `text` with `$type<Union>()` — portable, readable in
   SQL, validated at the application layer by Zod.
 
-## Tables (22)
+## Tables (31 across migrations 0000–0002)
 
 ### Identity & access
 | Table | Purpose |
@@ -43,9 +43,24 @@ PostgreSQL (Neon in production) via Drizzle ORM. All schema lives in
 | `prompts` | Tracked questions (category, locale, group, enabled) |
 | `ai_engines` | Engines we track (seeded, toggleable) |
 | `visibility_runs` | Scan executions (scope, status, counts, timings) |
-| `visibility_results` | Per run × prompt × engine: rank, mentioned, position, snippet |
-| `citations` | Sources AI answers cited (share, first/last seen) |
+| `visibility_results` | Per run × prompt × engine: mention flag/count + context, answer text, model, latency, token usage, cost |
+| `citations` | Sources AI answers linked (`kind`: `provider` vs `extracted`, position, owned/competitor flags) |
 | `competitor_mentions` | Who gets mentioned when we don't (share of voice) |
+
+### Onboarding (Phase 2)
+| Table | Purpose |
+| --- | --- |
+| `business_profiles` | Classified business per domain (name, category, entities) |
+| `crawl_jobs` / `site_pages` | SSRF-guarded homepage crawl results |
+| `onboarding_states` | Per-workspace wizard progress |
+
+### Scan evidence (Phase 3, migration 0002)
+| Table | Purpose |
+| --- | --- |
+| `intelligence_scans` | Scan batch: status, trigger, market, operation counters, accumulated `provider_cost_usd`, `mocked`, persisted scores + formula versions + coverage |
+| `scan_operations` | Resumable work items: unique (scan, operation key), `attempts`, sanitized `error` + `error_class` |
+| `keyword_metrics` | Per scan × keyword DataForSEO metrics — every field nullable, plus `cache_hit` / `mocked` |
+| `serp_snapshots` / `serp_results` | Live SERP check per keyword (`tracked_domain_rank`, null = absent) + result rows (rank, type, tracked/competitor flags) |
 
 ### Audit & action center
 | Table | Purpose |
@@ -82,10 +97,45 @@ cross-workspace read/update/delete all fail.
 Migrations are generated without a live database (drizzle-kit reads the TS
 schema), so CI and local machines need no connection to produce them.
 
+## Migration 0002 — intelligence (additive only)
+
+`drizzle/0002_little_supreme_intelligence.sql` adds the Phase 3 schema
+**additively** — migrations 0000/0001 are never edited; every change is a new
+`CREATE TABLE` / `ADD COLUMN` / index / seed statement:
+
+- **New tables:** `intelligence_scans`, `scan_operations`, `keyword_metrics`,
+  `serp_snapshots`, `serp_results` (listed above).
+- **New columns:** `visibility_runs` (+`scan_id`, `mocked`),
+  `visibility_results` (+mention count/context, model, latency,
+  `provider_request_id`, token usage, cost), `citations` (+`kind`,
+  `position`, owned/competitor flags), `recommendations` (+`competitor_id`,
+  `source_scan_id`, `dedup_key`), `usage_records` (+workspace/domain/scan/run
+  correlation, `cache_hit`, `success`, `error_class`, `actual_cost_usd`),
+  `ai_engines` (+`provider`, `mode`, capability flags, `source_description`).
+- **`ai_engines` seed:** 7 rows (`ON CONFLICT (key) DO NOTHING`) — two
+  engines with real adapters (`gemini`, `llama`) and five honestly `planned`
+  ("coming soon"), each with a `source_description` explaining why. See
+  [AI_VISIBILITY.md](AI_VISIBILITY.md).
+
+Constraints the application code must respect:
+
+- `visibility_runs_scan_prompt_engine_unique` is a **partial** unique index:
+  `(scan_id, prompt_id, engine) WHERE scan_id IS NOT NULL`. Drizzle's
+  `onConflictDoUpdate` must repeat the predicate (`targetWhere:
+  sql\`"scan_id" IS NOT NULL\``) — Postgres cannot use a partial index for
+  an inference missing the WHERE clause.
+- Full uniques backing idempotent upserts: `keyword_metrics (scan_id,
+  keyword)`, `serp_snapshots (scan_id, keyword)`,
+  `competitor_mentions (result_id, competitor_id)`.
+- `recommendations_domain_dedup_unique` is partial:
+  `(domain_id, dedup_key) WHERE dedup_key IS NOT NULL` — re-scans refresh
+  the existing row instead of stacking duplicates.
+
 ## Testing the real schema
 
 Integration tests run the **actual generated migrations** against PGlite
-(embedded PostgreSQL, `@electric-sql/pglite`):
+(embedded PostgreSQL, `@electric-sql/pglite`), including 0002's new tables
+and partial unique indexes:
 
 ```ts
 // src/lib/db/test-db.ts

@@ -16,6 +16,8 @@ export const engineKeys = [
   "google_ai_mode",
   "claude",
   "copilot",
+  /** Open-model engine served through the Groq API (never presented as a consumer assistant). */
+  "llama",
 ] as const;
 export type EngineKey = (typeof engineKeys)[number];
 

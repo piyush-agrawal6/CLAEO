@@ -1,4 +1,5 @@
 import {
+  boolean,
   doublePrecision,
   index,
   integer,
@@ -9,6 +10,7 @@ import {
   unique,
 } from "drizzle-orm/pg-core";
 import { users } from "@/lib/db/schema/auth";
+import type { ProviderErrorClass } from "@/lib/db/schema/types";
 
 /**
  * Workspace tenancy, membership, plans, billing, usage and audit trails.
@@ -81,11 +83,29 @@ export const usageRecords = pgTable(
     operation: text("operation").notNull(),
     units: integer("units").notNull().default(1),
     estimatedCost: doublePrecision("estimated_cost").notNull().default(0),
+    /**
+     * Phase 3 provider-request ledger fields. Correlation ids are stored as
+     * plain text (deliberately NOT foreign keys): the ledger is append-only
+     * audit/finance data that must never cascade-delete with the resource it
+     * describes, and FKs here would create schema module cycles.
+     */
+    domainId: text("domain_id"),
+    /** Intelligence scan that triggered the request, when applicable. */
+    scanId: text("scan_id"),
+    /** Individual visibility run that triggered the request, when applicable. */
+    runId: text("run_id"),
+    /** True when served from cache — no provider request was made. */
+    cacheHit: boolean("cache_hit").notNull().default(false),
+    success: boolean("success").notNull().default(true),
+    errorClass: text("error_class").$type<ProviderErrorClass>(),
+    /** Provider-reported actual cost when known (null = not reported). */
+    actualCostUsd: doublePrecision("actual_cost_usd"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
     index("usage_records_workspace_created_idx").on(table.workspaceId, table.createdAt),
     index("usage_records_provider_created_idx").on(table.provider, table.createdAt),
+    index("usage_records_scan_id_idx").on(table.scanId),
   ]
 );
 

@@ -6,7 +6,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
   return (
     <div className="flex min-h-svh flex-col">
       <header className="flex h-14 items-center justify-between px-4 sm:px-6">
-        <Link href="/" aria-label="Claeo home">
+        <Link href="/" aria-label="QuerySide home">
           <Logo />
         </Link>
         <ThemeToggle />

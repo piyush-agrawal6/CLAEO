@@ -5,10 +5,10 @@ credits.
 
 | Layer | Tool | Command | Scope |
 | --- | --- | --- | --- |
-| Unit | Vitest | `npm run test` | pure logic: env, guards, redaction, utils, AI retry, injection guard |
-| Integration | Vitest + PGlite | `npm run test` | real migrations, repositories, services, token flows |
+| Unit | Vitest | `npm run test` | pure logic: env, guards, redaction, utils, AI retry, injection guard, scoring |
+| Integration | Vitest + PGlite | `npm run test` | real migrations, repositories, services, token flows, the scan engine |
 | Component | Vitest + jsdom + RTL | `npm run test` | auth/domain/settings form rendering |
-| E2E | Playwright | `npm run test:e2e` | public pages, redirects, health, auth UX |
+| E2E | Playwright | `npm run test:e2e` | public pages, redirects, health, auth UX, the intelligence journey (mocked) |
 
 ## Embedded Postgres for integration tests
 
@@ -31,13 +31,34 @@ Consequences:
 
 Coverage highlights:
 
-- `migrations.test.ts` — all 22 tables exist; unique constraints enforced.
+- `migrations.test.ts` — every table from migrations 0000–0002 exists
+  (31 total, incl. the Phase 3 scan tables); unique + partial-unique
+  constraints enforced (scan-operation idempotency, workspace slug, email).
 - `token-service.test.ts` — hashed-at-rest, single-use, expiry, per-email
   rotation of verification + reset tokens.
 - `user-service.test.ts` — transactional signup, duplicate rejection, slug
   collision handling, membership resolution.
 - `domain-repository.test.ts` — **cross-workspace read/update/delete all fail**
   (IDOR regression net).
+- `scan.test.ts` (Phase 3) — full scan end-to-end on PGlite + in-memory Redis
+  + mock providers: plan caps, honest data/scores, idempotent replay,
+  auto-close, spend-cap skip, stale-resume crash recovery, cancellation,
+  tenant isolation (8 tests). Zero network, zero spend by construction.
+- `intelligence/queries.test.ts` (Phase 3) — read-model tenant isolation and
+  null ("not enough data") semantics for scores, observations, share metrics
+  and citations (6 tests).
+
+## Provider & scoring tests
+
+| File | Proves |
+| --- | --- |
+| `dataforseo.test.ts` (20) | Zod envelope validation, normalization + `omittedKeywords`, typed error classification, safe-only retry, Redis cache (7d/24h TTLs, hit recorded with units 0), guard-before/record-after |
+| `ai.test.ts` (16) | mention detection + URL extraction (deterministic), real-adapter plumbing against a stubbed fetch (zero network), engine-registry honesty (planned engines never scannable) |
+| `scoring.test.ts` (10) | both formulas, failed measurements excluded from the denominator, null-on-no-data, SoV/citation-share null semantics |
+
+Provider tests stub the network with `vi.stubGlobal("fetch", …)` and always
+call `vi.unstubAllGlobals()` in `afterEach` so a stub never leaks into the
+next test.
 
 ## Unit tests of the safety rails
 
@@ -63,10 +84,17 @@ mocked with `vi.mock` so tests render pure UI:
 ## E2E (Playwright)
 
 `playwright.config.ts` builds and starts the production server automatically
-(or reuses `PLAYWRIGHT_BASE_URL`). Phase 0/1 smoke suite (`e2e/smoke.spec.ts`)
-covers: landing renders, login fields, health status, protected-route
-redirect. Database-dependent journeys are added with the phases that create
-them (signup → onboarding → scan in Phase 4+).
+(or reuses `PLAYWRIGHT_BASE_URL`). Suites:
+
+- `e2e/smoke.spec.ts` — landing renders, login fields, health status,
+  protected-route redirect.
+- `e2e/intelligence.spec.ts` (Phase 3, mocked providers — zero spend, zero
+  network) — signup → manual onboarding → fixture prompts → two-step-confirm
+  scan from the dashboard launcher → scores, observations, actions and
+  citations all render from persisted evidence → the free plan's
+  1-scan-per-day cap denies a second start; plus auth-gating of every
+  intelligence page. Fixture triggers (`fixture-nobrand`, `fixture-absent`)
+  make the assertions exact and deterministic.
 
 Run:
 
@@ -75,10 +103,31 @@ npx playwright install   # once: browser binaries
 npm run test:e2e
 ```
 
+**Signup rate limit vs. suite size.** Signup is intentionally capped at
+5 attempts per 15 minutes per IP (hardcoded in
+`src/features/auth/actions.ts` — the E2E suites create one fresh account
+per test, and `onboarding.spec.ts` alone uses 5). Running all three
+suites back-to-back against one server makes the 6th signup
+(`intelligence.spec.ts`) hit the cap. When running against a dev server
+(`PLAYWRIGHT_BASE_URL`), split the run in two invocations and restart the
+server between them so the in-memory rate-limit counters reset:
+
+```bash
+npx playwright test e2e/intelligence.spec.ts
+# restart the dev server, then:
+npx playwright test e2e/smoke.spec.ts e2e/onboarding.spec.ts
+```
+
+This is a deliberate security property, not a test workaround: nothing
+in the E2E setup weakens the auth rate limits.
+
 ## Conventions
 
 - Deterministic only: no sleeps, no network, no randomness in assertions.
 - Mock providers take explicit fixtures — tests never invent data either.
+- Live provider checks are **opt-in only**: `ALLOW_LIVE_PROVIDER_TESTS=true`
+  (default off, and force-disabled in production by env hardening). The
+  default suite — local and CI — never calls a paid API.
 - LOG_LEVEL=silent in tests; the logger's behavior is asserted directly in
   `logger.test.ts`.
 - CI order: `lint` → `typecheck` → `test` → `build` (then `test:e2e`).

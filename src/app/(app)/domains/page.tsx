@@ -20,7 +20,7 @@ export default async function DomainsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Domains"
-        description="The websites Claeo tracks for this workspace."
+        description="The websites QuerySide tracks for this workspace."
       />
 
       <Card>

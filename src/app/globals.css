@@ -5,8 +5,11 @@
 
 /*
  * Design system: restrained, information-dense, professional.
- * Zinc neutrals + a single blue accent. Inspired by Linear/Vercel/Ahrefs
- * without copying any of them.
+ * Warm neutrals + the QuerySide orange accent. The vivid orange (#ff6a00)
+ * is used where it sits on dark surfaces or as a fill behind dark text;
+ * `--primary`/`--ring` in light mode use the deeper #c2410c so small text
+ * and focus rings clear WCAG AA (4.96:1 on light backgrounds).
+ * See docs/DESIGN_SYSTEM.md for the full brand contract.
  */
 
 :root {
@@ -17,7 +20,7 @@
   --card-foreground: oklch(0.145 0.015 285);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0.015 285);
-  --primary: oklch(0.546 0.245 262.881);
+  --primary: #c2410c;
   --primary-foreground: oklch(0.985 0.005 262.881);
   --secondary: oklch(0.97 0.004 285);
   --secondary-foreground: oklch(0.205 0.02 285);
@@ -31,7 +34,7 @@
   --warning: oklch(0.681 0.162 75.834);
   --border: oklch(0.925 0.006 285);
   --input: oklch(0.925 0.006 285);
-  --ring: oklch(0.546 0.245 262.881);
+  --ring: #c2410c;
   --sidebar: oklch(0.985 0.002 285);
   --sidebar-foreground: oklch(0.205 0.02 285);
   --sidebar-border: oklch(0.925 0.006 285);
@@ -46,8 +49,8 @@
   --card-foreground: oklch(0.985 0.002 285);
   --popover: oklch(0.175 0.012 285);
   --popover-foreground: oklch(0.985 0.002 285);
-  --primary: oklch(0.623 0.214 259.815);
-  --primary-foreground: oklch(0.985 0.005 262.881);
+  --primary: #ff6a00;
+  --primary-foreground: #111111;
   --secondary: oklch(0.235 0.012 285);
   --secondary-foreground: oklch(0.985 0.002 285);
   --muted: oklch(0.235 0.012 285);
@@ -60,7 +63,7 @@
   --warning: oklch(0.74 0.15 75.834);
   --border: oklch(1 0 0 / 12%);
   --input: oklch(1 0 0 / 16%);
-  --ring: oklch(0.623 0.214 259.815);
+  --ring: #ff6a00;
   --sidebar: oklch(0.155 0.012 285);
   --sidebar-foreground: oklch(0.985 0.002 285);
   --sidebar-border: oklch(1 0 0 / 10%);
@@ -117,5 +120,262 @@
   :focus-visible {
     outline: 2px solid var(--ring);
     outline-offset: 2px;
+  }
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+/* ============================================================================
+ * QUERYSIDE MARKETING DESIGN SYSTEM (public site)
+ * ----------------------------------------------------------------------------
+ * These tokens are STATIC: they do not flip with the dark theme, so the
+ * marketing site renders its fixed warm-canvas design regardless of the
+ * user's app theme preference. Marketing components must only use these
+ * `--color-canvas/ink/ash/line/brand/night*` tokens (plus `font-display`)
+ * and must never read semantic app tokens (`background`, `foreground`,
+ * `muted-foreground`, `border`) nor use `dark:` variants. This guarantees
+ * the marketing stylesheet cannot leak into the application UI and vice
+ * versa. See docs/DESIGN_SYSTEM.md.
+ * ========================================================================== */
+@theme {
+  /* Editorial display face (headlines) */
+  --font-display: var(--font-instrument-serif), "Instrument Serif", Georgia,
+    serif;
+
+  /* Warm light canvas */
+  --color-canvas: #fafaf8;
+  --color-ink: #111111;
+  --color-ash: #6b6860;
+  --color-line: #e6e4dc;
+  --color-tint: #f4f2ec;
+
+  /* Brand orange. `brand` is the vivid accent (CTA fills, logo, highlights);
+     `brand-strong` is the accessible variant for small text/rings on light
+     (4.96:1 on canvas) since vivid orange only reaches 2.75:1 there. */
+  --color-brand: #ff6a00;
+  --color-brand-strong: #c2410c;
+  --color-brand-ink: #111111;
+
+  /* Dark sections */
+  --color-night: #0e0e0c;
+  --color-night-ink: #fafaf8;
+  --color-night-ash: #a5a199;
+  --color-night-line: #24241e;
+}
+
+@layer utilities {
+  /* Thin technical grid lines used behind hero/visual sections. */
+  .mkt-grid {
+    background-image: linear-gradient(
+        to right,
+        var(--color-line) 1px,
+        transparent 1px
+      ),
+      linear-gradient(to bottom, var(--color-line) 1px, transparent 1px);
+    background-size: 96px 96px;
+  }
+
+  .mkt-grid-fade {
+    -webkit-mask-image: radial-gradient(
+      ellipse 70% 65% at 65% 45%,
+      #000 0%,
+      transparent 75%
+    );
+    mask-image: radial-gradient(
+      ellipse 70% 65% at 65% 45%,
+      #000 0%,
+      transparent 75%
+    );
+  }
+
+  /* Subtle film-grain texture (hero only; cheap static overlay). */
+  .mkt-noise {
+    position: relative;
+  }
+  .mkt-noise::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+    opacity: 0.03;
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  /* Focus rings must contrast the local background: on dark sections the
+     default (dark orange) ring is too low-contrast, so switch to vivid. */
+  .mkt-night :focus-visible {
+    outline-color: var(--color-brand);
+  }
+
+  /* Scroll entrance (driven by <Reveal/>; content is visible without JS —
+     a <noscript> override in the root layout un-hides it). */
+  .reveal {
+    opacity: 0;
+    transform: translateY(14px);
+    transition:
+      opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1),
+      transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+    transition-delay: var(--reveal-delay, 0ms);
+  }
+  .reveal[data-from="left"] {
+    transform: translateX(-20px);
+  }
+  .reveal[data-from="right"] {
+    transform: translateX(20px);
+  }
+  .reveal[data-from="none"] {
+    transform: none;
+  }
+  .reveal.is-in {
+    opacity: 1;
+    transform: none;
+  }
+
+  /* Integration ticker (duplicated track; translate -50% loops seamlessly). */
+  .marquee {
+    animation: mkt-marquee 44s linear infinite;
+  }
+  .marquee-reverse {
+    animation: mkt-marquee-reverse 38s linear infinite;
+  }
+
+  /* Terminal code lines reveal per line (no per-character spans: cheaper). */
+  .code-line {
+    animation: mkt-line-in 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation-delay: calc(var(--i, 0) * 70ms);
+  }
+
+  /* Active-step progress hairline in the dark process section. */
+  .step-progress {
+    animation: mkt-progress 6s linear forwards;
+  }
+
+  /* Cursor in the terminal status bar. */
+  .caret-blink {
+    animation: mkt-caret 1.1s steps(2, start) infinite;
+  }
+
+  /* SVG micro-motions for capability graphics. Deliberately CSS-driven (not
+     SMIL) so the global prefers-reduced-motion override applies to them. */
+  .svg-flow {
+    animation: mkt-flow 1.5s linear infinite;
+  }
+  .svg-blink {
+    animation: mkt-blink 2.4s ease-in-out infinite;
+  }
+  .svg-node-pulse {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: mkt-node 2.8s ease-in-out infinite;
+  }
+  .svg-sweep {
+    transform-box: fill-box;
+    transform-origin: left center;
+    animation: mkt-sweep 3.6s ease-in-out infinite;
+    animation-delay: var(--sweep-delay, 0ms);
+  }
+}
+
+@keyframes mkt-marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+@keyframes mkt-marquee-reverse {
+  from {
+    transform: translateX(-50%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+@keyframes mkt-line-in {
+  from {
+    opacity: 0;
+    transform: translateX(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+@keyframes mkt-progress {
+  from {
+    width: 0%;
+  }
+  to {
+    width: 100%;
+  }
+}
+@keyframes mkt-caret {
+  50% {
+    opacity: 0;
+  }
+}
+@keyframes mkt-flow {
+  to {
+    stroke-dashoffset: -28;
+  }
+}
+@keyframes mkt-blink {
+  0%,
+  100% {
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+@keyframes mkt-node {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.22);
+  }
+}
+@keyframes mkt-sweep {
+  0%,
+  15% {
+    transform: scaleX(0.08);
+  }
+  60%,
+  100% {
+    transform: scaleX(1);
+  }
+}
+
+/* Respect the user's motion preference everywhere (marketing + app). */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  .reveal {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+  }
+  .marquee,
+  .marquee-reverse,
+  .code-line,
+  .step-progress,
+  .caret-blink {
+    animation: none !important;
+  }
+  .step-progress {
+    width: 100%;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }

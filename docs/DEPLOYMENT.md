@@ -22,14 +22,14 @@ Target: **Vercel** (Next.js 16 App Router, Node runtime).
 Copy `.env.example` and set production values:
 
 ```bash
-NEXT_PUBLIC_APP_URL=https://app.claeo.example
+NEXT_PUBLIC_APP_URL=https://app.queryside.example
 AUTH_SECRET=<npx auth secret>
-AUTH_URL=https://app.claeo.example
+AUTH_URL=https://app.queryside.example
 DATABASE_URL=<neon pooled ssl url>
 UPSTASH_REDIS_REST_URL=…
 UPSTASH_REDIS_REST_TOKEN=…
 RESEND_API_KEY=…
-EMAIL_FROM=Claeo <onboarding@yourdomain.com>
+EMAIL_FROM=QuerySide <onboarding@yourdomain.com>
 
 # Providers — mock modes are force-disabled in production by src/lib/env.ts,
 # so real credentials must exist before AI/DataForSEO phases go live.

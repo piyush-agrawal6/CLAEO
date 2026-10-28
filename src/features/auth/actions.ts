@@ -4,7 +4,7 @@ import { AuthError } from "next-auth";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import type { z } from "zod";
-import { signIn, signOut } from "@/auth";
+import { googleAuthConfigured, signIn, signOut } from "@/auth";
 import { sendEmail } from "@/lib/email";
 import {
   accountExistsEmail,
@@ -19,6 +19,10 @@ import { logger } from "@/lib/logging/logger";
 import { hashPassword } from "@/lib/security/password";
 import { rateLimit, resolveClientIp } from "@/lib/security/rate-limit";
 import { safeCallbackUrl } from "@/lib/utils";
+import {
+  isNextNavigationError,
+  resolvePostAuthRedirect,
+} from "@/features/auth/redirects";
 import {
   forgotPasswordSchema,
   loginSchema,
@@ -37,6 +41,7 @@ import {
   verifyUserEmail,
 } from "@/server/repositories/user-repository";
 import { createUserWithWorkspace } from "@/server/services/user-service";
+import { isOnboardingComplete } from "@/server/services/onboarding-service";
 import {
   consumePasswordResetToken,
   consumeVerificationToken,
@@ -237,13 +242,17 @@ export async function loginAction(
     };
   }
 
-  const safeCallback = safeCallbackUrl(callbackUrl);
+  // Post-auth destination: sanitized callback, or onboarding state when the
+  // user has not completed setup yet (unknown for failing sign-ins — the
+  // value is only used once `signIn` succeeds).
+  const onboardingComplete = user ? await isOnboardingComplete(user.id) : false;
+  const redirectTo = resolvePostAuthRedirect({ callbackUrl, onboardingComplete });
 
   try {
     await signIn("credentials", {
       email,
       password,
-      redirectTo: safeCallback,
+      redirectTo,
     });
   } catch (error) {
     if (error instanceof AuthError) {
@@ -254,6 +263,10 @@ export async function loginAction(
         message: "Invalid email or password.",
       };
     }
+    // Success throws Next's redirect control-flow error — it must reach
+    // the framework or the browser never navigates (the session cookie is
+    // already set at that point).
+    if (isNextNavigationError(error)) throw error;
     reportError(error, { action: "login", email });
     return {
       status: "error",
@@ -263,7 +276,7 @@ export async function loginAction(
   }
 
   // Defensive: `signIn` redirects on success, so this is never reached.
-  redirect(safeCallback);
+  redirect(redirectTo);
 }
 
 /* ----------------------------- email verification ------------------------ */
@@ -452,6 +465,47 @@ export async function signoutAction(): Promise<void> {
   await signOut({ redirectTo: "/login" });
 }
 
-export async function signInWithGoogleAction(): Promise<void> {
-  await signIn("google", { redirectTo: "/dashboard" });
+/**
+ * Start the shared Auth.js Google flow (sign-in AND sign-up converge here —
+ * provisioning decisions happen inside the OAuth callback, never in a
+ * separate "Google signup" backend).
+ *
+ * `callbackUrl` (when present) was already sanitized by the login page; it
+ * is sanitized again here. New Google users are routed to /onboarding by
+ * `pages.newUser`; existing users return to the sanitized destination.
+ */
+export async function signInWithGoogleAction(formData: FormData): Promise<void> {
+  const rawCallback = formData.get("callbackUrl");
+  const redirectTo = safeCallbackUrl(
+    typeof rawCallback === "string" ? rawCallback : null
+  );
+
+  if (!googleAuthConfigured) {
+    // Provider not registered (missing GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET).
+    redirect("/login?error=Configuration");
+  }
+
+  const ip = await clientIp();
+  const byIp = await rateLimit({ key: `auth:google:ip:${ip}`, limit: 10, windowSeconds: 900 });
+  if (!byIp.allowed) {
+    redirect("/login?error=RateLimited");
+  }
+
+  try {
+    await signIn("google", { redirectTo });
+  } catch (error) {
+    // Auth.js failures (bad state, provider errors, the verified-email
+    // gate's AccessDenied...) surface on the login page; unknown error
+    // types fall back to its default message.
+    if (error instanceof AuthError) {
+      logger.info("Google sign-in failed", { type: error.type });
+      redirect(`/login?error=${encodeURIComponent(error.type)}`);
+    }
+    if (isNextNavigationError(error)) throw error;
+    reportError(error, { action: "google-signin" });
+    redirect("/login?error=Configuration");
+  }
+
+  // Defensive: `signIn` redirects on success, so this is never reached.
+  redirect("/login");
 }

@@ -60,6 +60,8 @@ export function limitForOperation(operation: OperationKind): number {
 export interface PlanLimits {
   domains: number;
   prompts: number;
+  /** Tracked competitors per domain (manual + auto-discovered). */
+  competitors: number;
   /** Number of AI engines available for tracking. */
   engines: number;
   /** Minimum hours between visibility refreshes per domain. */
@@ -79,6 +81,7 @@ export const PLAN_LIMITS: Record<WorkspacePlan, PlanLimits> = {
   free: {
     domains: 1,
     prompts: 10,
+    competitors: 2,
     engines: 1,
     refreshIntervalHours: 168, // weekly
     scansPerDay: 1,
@@ -89,6 +92,7 @@ export const PLAN_LIMITS: Record<WorkspacePlan, PlanLimits> = {
   starter: {
     domains: 1,
     prompts: 30,
+    competitors: 5,
     engines: 3,
     refreshIntervalHours: 72,
     scansPerDay: 3,
@@ -99,6 +103,7 @@ export const PLAN_LIMITS: Record<WorkspacePlan, PlanLimits> = {
   pro: {
     domains: 3,
     prompts: 100,
+    competitors: 10,
     engines: 5,
     refreshIntervalHours: 24,
     scansPerDay: 10,
@@ -109,6 +114,7 @@ export const PLAN_LIMITS: Record<WorkspacePlan, PlanLimits> = {
   growth: {
     domains: 10,
     prompts: 300,
+    competitors: 25,
     engines: 6,
     refreshIntervalHours: 24,
     scansPerDay: 30,
@@ -119,6 +125,7 @@ export const PLAN_LIMITS: Record<WorkspacePlan, PlanLimits> = {
   agency: {
     domains: 25,
     prompts: 1000,
+    competitors: 50,
     engines: 6,
     refreshIntervalHours: 24,
     scansPerDay: 100,
@@ -148,4 +155,12 @@ export const CACHE_TTL = {
   providerResponse: 6 * 60 * 60,
   /** Public visibility checker results per domain. */
   publicScan: 24 * 60 * 60,
+  /**
+   * DataForSEO keyword metrics (keyword_overview/live). The underlying
+   * Google-Ads-based dataset updates monthly — a 7-day cache never serves
+   * meaningfully stale numbers and saves whole request batches.
+   */
+  keywordMetrics: 7 * 24 * 60 * 60,
+  /** DataForSEO SERP snapshots (volatile; refreshed at most once per day). */
+  serpSnapshot: 24 * 60 * 60,
 } as const;
